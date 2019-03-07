@@ -1,6 +1,7 @@
-var log4js = require('log4js'); 
-var log_file = "./log4js_configuration.json";
+const log4js = require('log4js'); // eslint-disable-line import/no-extraneous-dependencies
 
-log4js.configure(log_file);
+const logFile = './log4js_configuration.json';
+
+log4js.configure(logFile);
 
 exports.logger = log4js;

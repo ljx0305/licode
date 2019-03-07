@@ -1,8 +1,13 @@
-/*global console, CryptoJS, XMLHttpRequest*/
+/* global console, XMLHttpRequest */
+
+/* eslint-disable */
+
+var crypto = require('crypto');
+
 var N = N || {};
 
 N.API = (function (N) {
-    "use strict";
+    'use strict';
     var createRoom, getRooms, getRoom, updateRoom, patchRoom,
         deleteRoom, createToken, createService, getServices,
         getService, deleteService, getUsers, getUser, deleteUser,
@@ -41,11 +46,13 @@ N.API = (function (N) {
     };
 
     updateRoom = function (room, name, callback, callbackError, options, params) {
-        send(callback, callbackError, 'PUT', {name: name, options: options}, 'rooms/' + room, params);
+        send(callback, callbackError, 'PUT', {name: name, options: options},
+             'rooms/' + room, params);
     };
 
     patchRoom = function (room, name, callback, callbackError, options, params) {
-        send(callback, callbackError, 'PATCH', {name: name, options: options}, 'rooms/' + room, params);
+        send(callback, callbackError, 'PATCH', {name: name, options: options},
+             'rooms/' + room, params);
     };
 
     deleteRoom = function (room, callback, callbackError, params) {
@@ -53,7 +60,8 @@ N.API = (function (N) {
     };
 
     createToken = function (room, username, role, callback, callbackError, params) {
-        send(callback, callbackError, 'POST', undefined, 'rooms/' + room + "/tokens", params, username, role);
+        send(callback, callbackError, 'POST', undefined, 'rooms/' + room + '/tokens',
+             params, username, role);
     };
 
     createService = function (name, key, callback, callbackError, params) {
@@ -81,7 +89,8 @@ N.API = (function (N) {
     };
 
     deleteUser = function (room, user, callback, callbackError, params) {
-        send(callback, callbackError, 'DELETE', undefined, 'rooms/' + room + '/users/' + user, params);
+        send(callback, callbackError, 'DELETE', undefined,
+             'rooms/' + room + '/users/' + user, params);
     };
 
     send = function (callback, callbackError, method, body, url, params, username, role) {
@@ -147,17 +156,10 @@ N.API = (function (N) {
                     case 205:
                         callback(req.responseText);
                         break;
-                    case 400:
-                        if (callbackError !== undefined) callbackError("400 Bad Request");
-                        break;
-                    case 401:
-                        if (callbackError !== undefined) callbackError("401 Unauthorized");
-                        break;
-                    case 403:
-                        if (callbackError !== undefined) callbackError("403 Forbidden");
-                        break;
                     default:
-                        if (callbackError !== undefined) callbackError(req.status + " Error" + req.responseText);
+                        if (callbackError !== undefined) {
+                          callbackError(req.status + ' Error' + req.responseText, req.status);
+                        }
                 }
             }
         };
@@ -176,17 +178,27 @@ N.API = (function (N) {
     };
 
     calculateSignature = function (toSign, key) {
-        var hash, hex, signed;
-        hash = CryptoJS.HmacSHA1(toSign, key);
-        hex = hash.toString(CryptoJS.enc.Hex);
-        signed = N.Base64.encodeBase64(hex);
-        return signed;
+      var hex = crypto.createHmac('sha1', key)
+        .update(toSign)
+        .digest('hex');
+      return Buffer.from(hex).toString('base64');
     };
 
     formatString = function(s){
         var r = s.toLowerCase();
-        var non_asciis = {'a': '[àáâãäå]', 'ae': 'æ', 'c': 'ç', 'e': '[èéêë]', 'i': '[ìíîï]', 'n': 'ñ', 'o': '[òóôõö]', 'oe': 'œ', 'u': '[ùúûűü]', 'y': '[ýÿ]'};
-        for (var i in non_asciis) { r = r.replace(new RegExp(non_asciis[i], 'g'), i); }
+        var nonAsciis = {'a': '[àáâãäå]',
+                         'ae': 'æ',
+                         'c': 'ç',
+                         'e': '[èéêë]',
+                         'i': '[ìíîï]',
+                         'n': 'ñ',
+                         'o': '[òóôõö]',
+                         'oe': 'œ',
+                         'u': '[ùúûűü]',
+                         'y': '[ýÿ]'};
+        for (var i in nonAsciis) {
+          r = r.replace(new RegExp(nonAsciis[i], 'g'), i);
+        }
         return r;
     };
 

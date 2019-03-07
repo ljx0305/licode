@@ -1,96 +1,104 @@
-exports.MonitorSubscriber = function (log) {
+/* eslint-disable no-param-reassign */
 
-    var that = {},
-    INTERVAL_STATS = 1000,
-    MIN_RECOVER_BW = 50000;
+const schemeHelpers = require('./schemeHelpers.js').schemeHelpers;
 
-    /* BW Status
-     * 0 - Stable 
-     * 1 - Insufficient Bandwidth 
-     * 2 - Trying recovery
-     * 3 - Won't recover
-     */
-    var BW_STABLE = 0, BW_INSUFFICIENT = 1, BW_RECOVERING = 2, BW_WONTRECOVER = 3;
-    
-    var calculateAverage = function (values) { 
+exports.MonitorSubscriber = (log) => {
+  const that = {};
+  const INTERVAL_STATS = 1000;
+  const TICS_PER_TRANSITION = 10;
 
-        if (values.length === undefined)
-            return 0;
-        var cnt = values.length;
-        var tot = parseInt(0);
-        for (var i = 0; i < values.length; i++){
-            tot+=parseInt(values[i]);
+  /* BW Status
+   * 0 - Stable
+   * 1 - Won't recover
+   */
+  const BW_STABLE = 0;
+  const BW_WONTRECOVER = 1;
+
+  const calculateAverage = (values) => {
+    if (values === undefined) { return 0; }
+    const cnt = values.length;
+    let tot = parseInt(0, 10);
+    for (let i = 0; i < values.length; i += 1) {
+      tot += parseInt(values[i], 10);
+    }
+    return Math.ceil(tot / cnt);
+  };
+
+
+  that.monitorMinVideoBw = (mediaStream, callback) => {
+    mediaStream.bwValues = [];
+    let tics = 0;
+    let lastAverage;
+    let average;
+    let lastBWValue;
+    mediaStream.bwStatus = BW_STABLE;
+    log.info('message: Start wrtc adapt scheme, ' +
+      `id: ${mediaStream.id}, ` +
+      'scheme: notify-break, ' +
+      `minVideoBW: ${mediaStream.minVideoBW}`);
+
+    mediaStream.minVideoBW *= 1000; // We need it in bps
+    mediaStream.lowerThres = Math.floor(mediaStream.minVideoBW * (0.8));
+    mediaStream.upperThres = Math.ceil(mediaStream.minVideoBW);
+    mediaStream.monitorInterval = setInterval(() => {
+      schemeHelpers.getBandwidthStat(mediaStream).then((bandwidth) => {
+        if (mediaStream.slideShowMode) {
+          return;
         }
-        return Math.ceil(tot/cnt);
-    };
-    
+        if (bandwidth) {
+          lastBWValue = bandwidth;
+          mediaStream.bwValues.push(lastBWValue);
+          if (mediaStream.bwValues.length > 5) {
+            mediaStream.bwValues.shift();
+          }
+          average = calculateAverage(mediaStream.bwValues);
+        }
 
-    that.monitorMinVideoBw = function(wrtc, callback){
-        wrtc.bwValues = [];
-        var isReporting = true;
-        var ticks = 0;
-        var retries = 0;
-        var ticksToTry = 0;
-        var lastAverage, average, lastBWValue, toRecover;
-        var nextRetry = 0;
-        wrtc.bwStatus = BW_STABLE;
-        log.debug("Start wrtc adapt scheme - notify-break", wrtc.minVideoBW);
-
-        wrtc.minVideoBW = wrtc.minVideoBW*1000; // We need it in bps
-        wrtc.lowerThres = Math.floor(wrtc.minVideoBW*(1-0.2));
-        wrtc.upperThres = Math.ceil(wrtc.minVideoBW);
-        var intervalId = setInterval(function () {
-            var newStats = wrtc.getStats();
-            if (newStats == null){
-                log.debug("Stopping BW Monitoring");
-                clearInterval(intervalId);
-                return;
+        switch (mediaStream.bwStatus) {
+          case BW_STABLE:
+            if (average <= lastAverage && (average < mediaStream.lowerThres)) {
+              if ((tics += 1) > TICS_PER_TRANSITION) {
+                log.info('message: scheme state change, ' +
+                  `id: ${mediaStream.id}, ` +
+                  'previousState: BW_STABLE, ' +
+                  'newState: BW_WONT_RECOVER, ' +
+                  `averageBandwidth: ${average}, ` +
+                  `lowerThreshold: ${mediaStream.lowerThres}`);
+                mediaStream.bwStatus = BW_WONTRECOVER;
+                mediaStream.setFeedbackReports(false, 1);
+                tics = 0;
+                callback('callback', { type: 'bandwidthAlert',
+                  message: 'insufficient',
+                  bandwidth: average });
+              }
             }
-            
-            if (wrtc.slideShowMode===true)
-                return;
+            break;
+          case BW_WONTRECOVER:
+            log.info('message: Switched to audio-only, ' +
+              `id: ${mediaStream.id}, ` +
+              'state: BW_WONT_RECOVER, ' +
+              `averageBandwidth: ${average}, ` +
+              `lowerThreshold: ${mediaStream.lowerThres}`);
+            tics = 0;
+            average = 0;
+            lastAverage = 0;
+            mediaStream.minVideoBW = false;
+            mediaStream.setFeedbackReports(false, 1);
+            callback('callback', { type: 'bandwidthAlert',
+              message: 'audio-only',
+              bandwidth: average });
+            clearInterval(mediaStream.monitorInterval);
+            break;
+          default:
+            log.error(`Unknown BW status, id: ${mediaStream.id}`);
+        }
+        lastAverage = average;
+      }).catch((reason) => {
+        clearInterval(mediaStream.monitorInterval);
+        log.error(`error getting stats: ${reason}`);
+      });
+    }, INTERVAL_STATS);
+  };
 
-            var theStats = JSON.parse(newStats);
-            for (var i = 0; i < theStats.length; i++){ 
-                if(theStats[i].hasOwnProperty('bandwidth')){   // Only one stream should have bandwidth
-                    lastBWValue = theStats[i].bandwidth;
-                    wrtc.bwValues.push(lastBWValue);
-                    if (wrtc.bwValues.length > 5){
-                        wrtc.bwValues.shift();
-                    }
-                    average = calculateAverage(wrtc.bwValues);
-                }
-            }
-            switch (wrtc.bwStatus){
-                case BW_STABLE:
-                    if(average <= lastAverage && (average < wrtc.lowerThres)){
-                        if (++ticks > 2){
-                            log.debug("STABLE STATE, Bandwidth is insufficient will stop sending video", average, "lowerThres", wrtc.lowerThres);
-                            wrtc.bwStatus = BW_WONTRECOVER;
-                            wrtc.setFeedbackReports(false, 1);
-                            ticks = 0;
-                            callback('callback', {type:'bandwidthAlert', message:'insufficient', bandwidth: average});
-                        }
-                    }                            
-                    break;
-                case BW_WONTRECOVER:
-                    log.debug("Switched to audio-only mode with no recovery", average);
-                    ticks = 0;
-                    nextRetry = 0;
-                    retries = 0;
-                    average = 0;
-                    lastAverage = 0;
-                    wrtc.minVideoBW = false;
-                    wrtc.setFeedbackReports (false, 1);
-                    callback('callback', {type:'bandwidthAlert', message:'audio-only', bandwidth: average});
-                    clearInterval(intervalId);
-                    break;
-                default:
-                    log.error("Unknown BW status");
-            }
-            lastAverage = average;
-        }, INTERVAL_STATS);
-    };
-
-    return that.monitorMinVideoBw;
-}
+  return that.monitorMinVideoBw;
+};

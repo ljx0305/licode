@@ -1,6 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-java -jar compiler.jar --js ../lib/xmlhttprequest.js --js_output_file ../dist/xmlhttprequest.js
+set -e
+
+mkdir ../dist || true
+mkdir ../build || true
+
+google-closure-compiler-js ../lib/xmlhttprequest.js > ../dist/xmlhttprequest.js
 
 TARGET=../dist/nuve.js
 

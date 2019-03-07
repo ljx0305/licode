@@ -1,8 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-mkdir ../dist
-mkdir ../build
+set -e
 
-java -jar compiler.jar --js ../src/hmac-sha1.js --js ../src/N.js --js ../src/N.Base64.js --js ../src/N.API.js --js_output_file ../build/nuve.js
+mkdir ../dist || true
+mkdir ../build || true
+
+google-closure-compiler-js ../src/N.js ../src/N.API.js > ../build/nuve.js
 
 ./compileDist.sh

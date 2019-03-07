@@ -1,15 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -e
+
+SCRIPT=`pwd`/$0
+FILENAME=`basename $SCRIPT`
+ROOT=`dirname $SCRIPT`
+LICODE_ROOT="$ROOT"/..
+CURRENT_DIR=`pwd`
+NVM_CHECK="$LICODE_ROOT"/scripts/checkNvm.sh
+
+. $NVM_CHECK
+
+nvm use
 
 echo [spine] Installing node_modules for Spine
 
-npm install --loglevel error socket.io-client@0.9.16 log4js node-getopt xmlhttprequest@1.5.0
+npm install --loglevel error socket.io-client@2.0.3 log4js@1.0.1 node-getopt xmlhttprequest@1.5.0
 
 echo [spine] Done, node_modules installed
 
-cd ../erizo_controller/erizoClient/tools
+cd ../erizo_controller/erizoClient/
 
-./compilefc.sh
-
-cp ../dist/erizofc.js ../../../spine/
+$LICODE_ROOT/node_modules/.bin/gulp erizofc
 
 echo [spine] Done, erizofc.js compiled

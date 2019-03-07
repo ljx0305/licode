@@ -1,69 +1,64 @@
-/*global require, exports, console, setInterval, clearInterval*/
+/* global require, exports */
 
-var logger = require('./../common/logger').logger;
 
-// Logger
-var log = logger.getLogger("ErizoAgentReporter");
+const os = require('os');
 
-var os = require('os');
+exports.Reporter = (spec) => {
+  const that = {};
 
-exports.Reporter = function (spec) {
-    "use strict";
 
-    var that = {},
-    	my_id = spec.id,
-    	my_meta = spec.metadata || {};
+  const myId = spec.id;
 
-    that.getErizoAgent = function (callback) {
-        var data = {
-        	info: {
-        		id: my_id,
-        		rpc_id: 'ErizoAgent_' + my_id
-        	},
-        	metadata: my_meta,
-        	stats: getStats()
-        };
-        callback(data);
+
+  const myMeta = spec.metadata || {};
+
+  let lastTotal = 0;
+  let lastIdle = 0;
+
+  const getStats = () => {
+    const cpus = os.cpus();
+
+    let user = 0;
+    let nice = 0;
+    let sys = 0;
+    let idle = 0;
+    let irq = 0;
+    let total = 0;
+    let cpu = 0;
+
+    cpus.forEach((singleCpuInfo) => {
+      user += singleCpuInfo.times.user;
+      nice += singleCpuInfo.times.nice;
+      sys += singleCpuInfo.times.sys;
+      irq += singleCpuInfo.times.irq;
+      idle += singleCpuInfo.times.idle;
+    });
+    total = user + nice + sys + idle + irq;
+
+    cpu = 1 - ((idle - lastIdle) / (total - lastTotal));
+    const mem = 1 - (os.freemem() / os.totalmem());
+
+    lastTotal = total;
+    lastIdle = idle;
+
+    const data = {
+      perc_cpu: cpu,
+      perc_mem: mem,
     };
+    return data;
+  };
 
-    var last_total = 0;
-    var last_idle = 0;
-
-    var getStats = function () {
-
-        var cpus = os.cpus();
-
-        var user = 0;
-        var nice = 0;
-        var sys = 0;
-        var idle = 0;
-        var irq = 0;
-        var total = 0;
-
-        for(var cpu in cpus){
-            
-            user += cpus[cpu].times.user;
-            nice += cpus[cpu].times.nice;
-            sys += cpus[cpu].times.sys;
-            irq += cpus[cpu].times.irq;
-            idle += cpus[cpu].times.idle;
-        }
-
-        total = user + nice + sys + idle + irq;
-
-        var cpu =  1 - ((idle - last_idle) / (total - last_total));
-        var mem = 1 - (os.freemem() / os.totalmem());
-
-        last_total = total;
-        last_idle = idle;
-
-    	var data = {
-    		perc_cpu: cpu,
-            perc_mem: mem
-    	};
-        
-    	return data;
+  that.getErizoAgent = (callback) => {
+    const data = {
+      info: {
+        id: myId,
+        rpc_id: `ErizoAgent_${myId}`,
+      },
+      metadata: myMeta,
+      stats: getStats(),
     };
+    callback(data);
+  };
 
-	return that;
+  return that;
 };

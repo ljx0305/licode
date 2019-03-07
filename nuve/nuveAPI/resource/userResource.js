@@ -1,106 +1,87 @@
-/*global exports, require, console, Buffer*/
-var roomRegistry = require('./../mdb/roomRegistry');
-var serviceRegistry = require('./../mdb/serviceRegistry');
-var cloudHandler = require('../cloudHandler');
+/* global exports, require */
 
-var logger = require('./../logger').logger;
+
+const serviceRegistry = require('./../mdb/serviceRegistry');
+const cloudHandler = require('../cloudHandler');
+
+const logger = require('./../logger').logger;
 
 // Logger
-var log = logger.getLogger("UserResource");
-
-var currentService;
-var currentRoom;
+const log = logger.getLogger('UserResource');
 
 /*
  * Gets the service and the room for the proccess of the request.
  */
-var doInit = function (roomId, callback) {
-    "use strict";
-    currentService = require('./../auth/nuveAuthenticator').service;
+const doInit = (req, callback) => {
+  const currentService = req.service;
 
-    serviceRegistry.getRoomForService(roomId, currentService, function (room) {
-        currentRoom = room;
-        callback();
-    });
-
+  serviceRegistry.getRoomForService(req.params.room, currentService, (room) => {
+    callback(currentService, room);
+  });
 };
 
 /*
- * Get User. Represent a determined user of a room. This is consulted to erizoController using RabbitMQ RPC call.
+ * Get User. Represent a determined user of a room.
+ * This is consulted to erizoController using RabbitMQ RPC call.
  */
-exports.getUser = function (req, res) {
-    "use strict";
+exports.getUser = (req, res) => {
+  doInit(req, (currentService, currentRoom) => {
+    if (currentService === undefined) {
+      res.status(404).send('Service not found');
+      return;
+    } else if (currentRoom === undefined) {
+      log.info(`message: getUser - room not found, roomId: ${req.params.room}`);
+      res.status(404).send('Room does not exist');
+      return;
+    }
 
-    doInit(req.params.room, function () {
+    const user = req.params.user;
 
-        if (currentService === undefined) {
-            res.send('Service not found', 404);
-            return;
-        } else if (currentRoom === undefined) {
-            log.info('Room ', req.params.room, ' does not exist');
-            res.send('Room does not exist', 404);
-            return;
+    cloudHandler.getUsersInRoom(currentRoom._id, (users) => {
+      if (users === 'error') {
+        res.status(503).send('CloudHandler does not respond');
+        return;
+      }
+      let userFound = false;
+      users.forEach((userInList) => {
+        if (userInList.name === user) {
+          userFound = true;
+          log.info(`message: getUser success, ${logger.objectToLog(user)}`);
+          res.send(userInList);
         }
-
-        var user = req.params.user;
-
-        
-        cloudHandler.getUsersInRoom (currentRoom._id, function (users) {
-            if (users === 'error') {
-                res.send('CloudHandler does not respond', 401);
-                return;
-            }
-            for (var index in users){
-                
-                if (users[index].name === user){
-                    log.info('Found user', user);
-                    res.send(users[index]);
-                    return;
-                }
-
-            }
-            log.error('User', req.params.user, 'does not exist')
-            res.send('User does not exist', 404);
-            return;
-            
-
-        });
-
+      });
+      if (!userFound) {
+        log.error(`message: getUser user not found, userId: ${req.params.user}`);
+        res.status(404).send('User does not exist');
+      }
     });
+  });
 };
 
 /*
- * Delete User. Removes a determined user from a room. This order is sent to erizoController using RabbitMQ RPC call.
+ * Delete User. Removes a determined user from a room.
+ * This order is sent to erizoController using RabbitMQ RPC call.
  */
-exports.deleteUser = function (req, res) {
-    "use strict";
+exports.deleteUser = (req, res) => {
+  doInit(req, (currentService, currentRoom) => {
+    if (currentService === undefined) {
+      res.status(404).send('Service not found');
+      return;
+    } else if (currentRoom === undefined) {
+      log.info(`message: deleteUser - room not found, roomId: ${req.params.room}`);
+      res.status(404).send('Room does not exist');
+      return;
+    }
 
-    doInit(req.params.room, function () {
+    const user = req.params.user;
 
-        if (currentService === undefined) {
-            res.send('Service not found', 404);
-            return;
-        } else if (currentRoom === undefined) {
-            log.info('Room ', req.params.room, ' does not exist');
-            res.send('Room does not exist', 404);
-            return;
-        }
-
-        var user = req.params.user;
-        
-
-
-        cloudHandler.deleteUser (user, currentRoom._id, function(result){
-            if(result === 'User does not exist'){
-                res.send(result, 404);
-            }
-            else {
-                res.send(result);
-                return;
-            }
-        });
-        
-
-        //Consultar RabbitMQ
+    cloudHandler.deleteUser(user, currentRoom._id, (result) => {
+      if (result !== 'Success') {
+        res.status(404).send(result);
+      } else {
+        res.send(result);
+      }
     });
+        // Consultar RabbitMQ
+  });
 };

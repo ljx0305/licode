@@ -1,12 +1,15 @@
 {
   "basicExampleUrl": "https://localhost/",
   "publishConfig" : {
-    "video":{"file":"file:///YOUR_LICODE_COMPATIBLE_TEST_FILE"}, 
-    "audio":true, 
+    "_video":{"file":"file:///YOUR_LICODE_COMPATIBLE_TEST_FILE"},
+    "video":{"synthetic":{"audioBitrate": 30000,
+             "minVideoBitrate": 10000,
+             "maxVideoBitrate": 300000}},
+    "audio":true,
     "data":true
   },
   "subscribeConfig" : {
-    "video":{   
+    "video":{
       "recording":"file///YOUR_DESTINATION_FOR_RECORDING"
     },
     "video": true,
@@ -15,7 +18,10 @@
   },
   "numPublishers": 0,
   "numSubscribers" : 1,
-  "publishersAreSubscribers" : true,
-  "connectionCreationInterval" : 500
-
+  "publishersAreSubscribers" : false,
+  "connectionCreationInterval" : 500,
+  "stats" : [
+    "packetsLost",
+    "bitrateCalculated"
+  ]
 }
